@@ -1,0 +1,410 @@
+#!/bin/bash
+# Command-line interface for managing file transfers
+# Documentation: Run 'tsh help'
+
+# --- Strict Mode & Setup ---
+set -o errexit
+set -o nounset
+set -o pipefail
+
+##################################################
+# GLOBAL CONFIGURATION & CONSTANTS
+##################################################
+readonly VERSION="8.1 (2025-07-17)"
+readonly MIN_BASH_VERSION="5.0"
+readonly CONFIG_DIR="${TSH_CONFIG_DIR:-$HOME/.config/tsh}"
+readonly ENV_FILE="$CONFIG_DIR/tsh.env"
+readonly DB_FILE="$CONFIG_DIR/tsh-db.csv"
+readonly LOG_FILE="$CONFIG_DIR/tsh-audit.log"
+readonly LOCK_FILE="/tmp/tsh.lock.$$"
+readonly INSTALL_PATH="/usr/local/bin/tsh"
+readonly USER_AGENT="curl/8.1.2"
+
+# --- Global Flags & State ---
+DEBUG_MODE=0
+
+# --- True-Color Support ---
+readonly COLOR_RESET='\033[0m'
+readonly COLOR_RED='\033[38;2;255;85;85m'
+readonly COLOR_GREEN='\033[38;2;85;255;85m'
+readonly COLOR_YELLOW='\033[38;2;255;255;85m'
+readonly COLOR_BLUE='\033[38;2;85;170;255m'
+readonly COLOR_CYAN='\033[38;2;85;255;255m'
+readonly COLOR_ORANGE='\033[38;2;255;170;85m'
+readonly COLOR_BOLD='\033[1m'
+
+# --- Global Default Configuration ---
+declare -A config
+config=(
+    [TSH_SERVER]="https://share.trap.lol" [TSH_USER]="" [TSH_PASS]="" [TSH_TOKEN]=""
+    [TSH_DB]="$DB_FILE" [TSH_LOG]="$LOG_FILE" [TSH_MAX_LOG_AGE]=30 [TSH_AUTO_SECURE]=1
+    [TSH_CONFIRM_DELETE]=1 [TSH_TIMEOUT]=60 [TSH_MAX_RETRY]=3
+    [TSH_ENCRYPT_CMD]="gpg -c --armor -o -" [TSH_DECRYPT_CMD]="gpg -d -o -" [TSH_QUIET]=0
+)
+
+
+##################################################
+# UTILITY & LOGGING FUNCTIONS
+##################################################
+
+log() {
+    local level="$1" message="$2" color="$COLOR_RESET"
+    if [[ "${config[TSH_QUIET]}" -eq 1 && "$level" != "ERROR" && "$level" != "DEBUG" ]]; then return; fi
+    case "$level" in
+        "ERROR") color="$COLOR_RED" ;; "WARN")  color="$COLOR_ORANGE" ;;
+        "SUCCESS") color="$COLOR_GREEN" ;; "INFO") color="$COLOR_CYAN" ;;
+        "DEBUG") color="$COLOR_YELLOW" ;;
+    esac
+    if [[ "$level" == "ERROR" ]]; then
+        printf "%b" "${color}${COLOR_BOLD}[$level]${COLOR_RESET} ${color}$message${COLOR_RESET}\n" >&2
+    else
+        printf "%b" "${color}${COLOR_BOLD}[$level]${COLOR_RESET} ${color}$message${COLOR_RESET}\n"
+    fi
+}
+log_audit_event() { touch "$LOG_FILE"; printf "%s|%s|%s|%s\n" "$(date --iso-8601=seconds)" "$1" "$2" "$3" >> "$LOG_FILE"; }
+cleanup() { rm -f "$LOCK_FILE"; }
+validate_id() {
+    local id="$1"
+    if ! [[ "$id" =~ ^[a-zA-Z0-9_-]+$ ]]; then log "ERROR" "Invalid ID format."; return 1; fi
+    if [ ! -f "$DB_FILE" ] || ! grep -q "^$id|" "$DB_FILE"; then log "ERROR" "File ID '$id' not found in local DB."; return 1; fi
+}
+
+
+##################################################
+# INSTALLATION & LIFECYCLE MANAGEMENT
+##################################################
+
+install_tsh() {
+    if [ -f "$INSTALL_PATH" ]; then
+        log "WARN" "tsh is already installed at $INSTALL_PATH."
+        read -rp "$(printf "%b" "${COLOR_YELLOW}Do you want to overwrite it? [y/N]: ${COLOR_RESET}")" confirm
+        if [[ ! "$confirm" =~ ^[yY](es)?$ ]]; then log "INFO" "Installation aborted."; exit 0; fi
+    fi
+    if [[ "$EUID" -ne 0 ]]; then
+        log "INFO" "Sudo privileges are required to install to ${INSTALL_PATH}."
+        sudo -E bash "$0" "$@"; exit 0
+    fi
+    log "SUCCESS" "Privileges acquired. Installing..."
+    cp "$0" "$INSTALL_PATH" && chmod 755 "$INSTALL_PATH"
+    log "SUCCESS" "tsh has been installed successfully to $INSTALL_PATH!"
+    local original_user="${SUDO_USER:-$(whoami)}"
+    local user_config_dir="/home/$original_user/.config/tsh"
+    if [ ! -d "$user_config_dir" ]; then
+        printf "\n"; log "INFO" "Running first-time configuration as user '$original_user'..."
+        sudo -u "$original_user" bash -c "tsh --first-run"
+    fi
+    printf "\n"; log "SUCCESS" "Installation complete. You can now use the 'tsh' command system-wide."
+}
+uninstall_tsh() {
+    if [ ! -f "$INSTALL_PATH" ]; then log "ERROR" "tsh is not installed. Nothing to uninstall."; exit 1; fi
+    log "WARN" "This will remove the main 'tsh' program."
+    read -rp "$(printf "%b" "${COLOR_YELLOW}Are you sure you want to uninstall? [y/N]: ${COLOR_RESET}")" confirm
+    if [[ ! "$confirm" =~ ^[yY](es)?$ ]]; then log "INFO" "Uninstallation aborted."; exit 0; fi
+    if [[ "$EUID" -ne 0 ]]; then
+        log "INFO" "Sudo privileges are required to uninstall from ${INSTALL_PATH}."
+        sudo -E bash "$0" "$@"; exit 0
+    fi
+    log "INFO" "Removing program file: $INSTALL_PATH"; rm -f "$INSTALL_PATH"; log "SUCCESS" "tsh program has been uninstalled."
+    local original_user="${SUDO_USER:-$(whoami)}"
+    sudo -u "$original_user" bash -c "tsh --post-uninstall-cleanup"
+}
+post_uninstall_cleanup() {
+    printf "\n"; log "WARN" "Do you also want to delete all configuration, logs, and database files?"
+    log "WARN" "This action is ${COLOR_RED}${COLOR_BOLD}PERMANENT${COLOR_RESET}${COLOR_ORANGE} and will delete: $CONFIG_DIR"
+    read -rp "$(printf "%b" "${COLOR_YELLOW}Delete all user data? [y/N]: ${COLOR_RESET}")" confirm
+    if [[ "$confirm" =~ ^[yY](es)?$ ]]; then
+        log "INFO" "Deleting configuration directory: $CONFIG_DIR"; rm -rf "$CONFIG_DIR"; log "SUCCESS" "All tsh user data has been deleted."
+    else
+        log "INFO" "Configuration data has been kept at $CONFIG_DIR."
+    fi
+}
+first_run_setup() { mkdir -p "$CONFIG_DIR"; chmod 700 "$CONFIG_DIR"; init_db; init_env; }
+
+
+##################################################
+# CONFIGURATION & CORE FEATURE IMPLEMENTATIONS
+##################################################
+
+init_security() {
+    umask 077
+    for cmd in curl awk date gpg sha256sum du sed column; do
+        if ! command -v "$cmd" &>/dev/null; then log "ERROR" "Missing required command: '$cmd'." >&2; exit 1; fi
+    done
+}
+init_db() {
+    touch "$DB_FILE"
+    if [ ! -s "$DB_FILE" ]; then printf "id|timestamp|filename|custom_name|download_url|delete_token|file_size|description|sha256|is_encrypted\n" > "$DB_FILE"; fi
+}
+init_env() {
+    log "INFO" "Welcome to tsh! Let's get you set up."
+    touch "$ENV_FILE" && chmod 600 "$ENV_FILE"
+    local temp_config; for key in "${!config[@]}"; do temp_config[$key]="${config[$key]}"; done
+    read -rp "Enter transfer.sh URL [${temp_config[TSH_SERVER]}]: " server
+    temp_config[TSH_SERVER]="${server:-${temp_config[TSH_SERVER]}}"
+    log "INFO" "You can authenticate with a User/Password or a Bearer Token. Token is recommended."
+    read -rp "Enter API Token (leave blank to use user/pass): " token
+    temp_config[TSH_TOKEN]="$token"
+    if [[ -z "${temp_config[TSH_TOKEN]}" ]]; then
+        while [[ -z "${temp_config[TSH_USER]}" ]]; do read -rp "Enter username (required): " temp_config[TSH_USER]; done
+        while [[ -z "${temp_config[TSH_PASS]}" ]]; do read -rsp "Enter password (required): " temp_config[TSH_PASS]; printf "\n"; done
+    fi
+    for key in "${!temp_config[@]}"; do printf "%s=\"%s\"\n" "$key" "${temp_config[$key]}" >> "$ENV_FILE"; done
+    log "SUCCESS" "Configuration saved to $ENV_FILE."
+}
+upload() {
+    local file="$1" custom_name="${2:-}" description="${3:-}" encrypt=${4:-0} max_days="${5:-}" max_downloads="${6:-}"
+    [ ! -f "$file" ] && log "ERROR" "File '$file' does not exist." && return 1
+    local temp_file="" upload_name="$custom_name" original_file="$file"
+    if (( encrypt )); then
+        log "INFO" "Encrypting '$file'..."; temp_file=$(mktemp --tmpdir tsh-upload.XXXXXX); trap 'rm -f "$temp_file"' RETURN
+        if ! eval "${config[TSH_ENCRYPT_CMD]}" < "$file" > "$temp_file"; then log "ERROR" "Encryption failed." && return 2; fi
+        file="$temp_file"; [[ -z "$upload_name" ]] && upload_name="$(basename "$original_file").asc"
+    fi
+    local file_hash; file_hash=$(sha256sum "$file" | awk '{print $1}')
+    local file_size; file_size=$(du -h "$file" | awk '{print $1}')
+    log "INFO" "Uploading '$original_file' (Size: $file_size)..."
+    local curl_opts=("--silent" "--show-error" "--include" "--connect-timeout" "${config[TSH_TIMEOUT]}" -A "$USER_AGENT")
+    if [[ -n "${config[TSH_TOKEN]}" ]]; then curl_opts+=(-H "Authorization: Bearer ${config[TSH_TOKEN]}"); else curl_opts+=(--user "${config[TSH_USER]}:${config[TSH_PASS]}"); fi
+    [[ -n "$max_days" ]] && curl_opts+=(-H "Max-Days: $max_days")
+    [[ -n "$max_downloads" ]] && curl_opts+=(-H "Max-Downloads: $max_downloads")
+    curl_opts+=(-H "X-File-Hash: $file_hash" -F "file=@$file;filename=${upload_name:-$(basename "$original_file")}")
+    local retry=0; while (( retry++ < config[TSH_MAX_RETRY] )); do
+        local response; response=$(curl "${curl_opts[@]}" "${config[TSH_SERVER]}/")
+        if [[ "$DEBUG_MODE" -eq 1 ]]; then
+            log "DEBUG" "--- Start Server Response ---"; printf "%s\n" "$response"; log "DEBUG" "--- End Server Response ---"
+        fi
+        local http_status; http_status=$(printf "%s" "$response" | head -n 1 | awk '{print $2}')
+        if [[ "$http_status" -ge 200 && "$http_status" -lt 300 ]]; then
+            local download_url; download_url=$(printf "%s" "$response" | awk '/^https?:\/\// {url=$0} END {print url}' | tr -d '\r\n')
+            local delete_token; delete_token=$(printf "%s" "$response" | grep -i 'x-url-delete:' | awk -F'/' '{print $NF}' | tr -d '\r\n')
+            if [[ "$download_url" =~ ^https?:// ]]; then
+                local short_id; short_id=$(printf "%s" "$download_url" | awk -F'/' '{print $(NF-1)}')
+                printf "%s|%s|%s|%s|%s|%s|%s|%s|%s|%d\n" "$short_id" "$(date --iso-8601=seconds)" "$(basename "$original_file")" "${upload_name:-$(basename "$original_file")}" "$download_url" "$delete_token" "$file_size" "$description" "$file_hash" "$encrypt" >> "$DB_FILE"
+                if (( ! config[TSH_QUIET] )); then
+                    log "SUCCESS" "Upload complete!"; printf "  %b %s\n" "${COLOR_BOLD}ID:${COLOR_RESET}" "$short_id"; printf "  %b %s\n" "${COLOR_BOLD}URL:${COLOR_RESET}" "$download_url"
+                    if [[ -n "$delete_token" ]]; then printf "  %b tsh delete %s\n" "${COLOR_BOLD}Delete:${COLOR_RESET}" "$short_id"; fi
+                else
+                    printf "%s\n" "$download_url"
+                fi
+                log_audit_event "UPLOAD" "SUCCESS" "$short_id|$(basename "$original_file")"; return 0
+            fi
+        fi
+        log "WARN" "Upload attempt $retry failed (HTTP: ${http_status:-N/A}). Retrying in $((retry*2))s..." && sleep $((retry * 2))
+    done; log "ERROR" "Upload failed after ${config[TSH_MAX_RETRY]} retries. Unable to parse a valid URL from the server response." && return 1
+}
+download() {
+    [ $# -eq 0 ] && { log "ERROR" "You must provide a file ID. Usage: tsh download <ID> [output_file]"; return 1; }
+    local id="$1" output_file="${2:-}"; validate_id "$id" || return 1
+    # shellcheck disable=SC2162
+    IFS='|' read -r _ _ _ custom_name download_url _ _ _ _ is_encrypted < <(grep "^$id|" "$DB_FILE")
+    [[ -z "$output_file" ]] && output_file="$custom_name"
+    log "INFO" "Downloading '$custom_name' to '$output_file'..."
+    local temp_file; temp_file=$(mktemp --tmpdir tsh-download.XXXXXX); trap 'rm -f "$temp_file"' RETURN
+    if ! curl --fail -L -A "$USER_AGENT" -o "$temp_file" "$download_url"; then log "ERROR" "Download failed."; return 1; fi
+    if (( is_encrypted )); then
+        log "INFO" "File is encrypted. Decrypting...";
+        if ! eval "${config[TSH_DECRYPT_CMD]}" < "$temp_file" > "$output_file"; then
+            log "ERROR" "Decryption failed."; mv "$temp_file" "$output_file.encrypted"; log "WARN" "Encrypted file saved as '$output_file.encrypted'"; return 1
+        fi; rm -f "$temp_file"
+    else
+        mv "$temp_file" "$output_file"
+    fi
+    log "SUCCESS" "File saved to '$output_file'"; log_audit_event "DOWNLOAD" "SUCCESS" "$id|$output_file"
+}
+list_files() {
+    # FINAL FIX: Replaced the complex, fragile pipeline with a much simpler and more
+    # reliable method to generate and format the output table.
+    if [ ! -s "$DB_FILE" ] || [[ $(wc -l < "$DB_FILE") -le 1 ]]; then
+        log "INFO" "No files have been uploaded yet."
+        return
+    fi
+    # Use a subshell to group all printf statements.
+    # Their combined output will be piped to 'column' just once for formatting.
+    (
+        # Print the header line first, with bolding and tabs.
+        printf "${COLOR_BOLD}ID\tTIMESTAMP\tFILENAME\tSIZE\tENCRYPTED${COLOR_RESET}\n"
+        # Set IFS locally for the read loop and use sed to skip the header in the data file.
+        local IFS='|'
+        sed 1d "$DB_FILE" | while read -r id ts fname cname url token size desc hash enc; do
+            local encrypted_status="No"
+            if [[ "$enc" -eq 1 ]]; then encrypted_status="Yes"; fi
+            # Print each data row, separated by tabs.
+            printf "%s\t%s\t%s\t%s\t%s\n" "$id" "$(date -d "$ts" '+%Y-%m-%d %H:%M')" "$cname" "$size" "$encrypted_status"
+        done
+    ) | column -t -s $'\t'
+}
+info() {
+    [ $# -eq 0 ] && { log "ERROR" "You must provide a file ID. Usage: tsh info <ID>"; return 1; }
+    local id="$1"; validate_id "$id" || return 1
+    # shellcheck disable=SC2162
+    IFS='|' read -r id ts fname cname url token size desc hash enc < <(grep "^$id|" "$DB_FILE")
+    printf "%b\n" "${COLOR_BOLD}${COLOR_BLUE}File Details for ID: $id${COLOR_RESET}"
+    printf "  %-20s %s\n" "Original Filename:" "$fname"; printf "  %-20s %s\n" "Uploaded As:" "$cname"
+    printf "  %-20s %s\n" "Timestamp:" "$(date -d "$ts" '+%Y-%m-%d %H:%M:%S %Z')"; printf "  %-20s %s\n" "Size:" "$size"
+    printf "  %-20s %s\n" "Description:" "${desc:-N/A}"; printf "  %-20s %s\n" "SHA256 Hash:" "$hash"
+    printf "  %-20s %s\n" "Encrypted:" "$(if ((enc)); then echo "Yes"; else echo "No"; fi)"; printf "  %-20s %s\n" "Download URL:" "$url"
+    if [[ -n "$token" ]]; then printf "  %-20s tsh delete %s\n" "Delete Command:" "$id"; else printf "  %-20s %s\n" "Delete Command:" "N/A (No delete token)"; fi
+    log_audit_event "INFO" "SUCCESS" "$id"
+}
+delete_file() {
+    [ $# -eq 0 ] && { log "ERROR" "You must provide a file ID. Usage: tsh delete <ID>"; return 1; }
+    local id="$1"; validate_id "$id" || return 1
+    # shellcheck disable=SC2162
+    IFS='|' read -r id _ _ _ url token _ _ _ _ < <(grep "^$id|" "$DB_FILE")
+    if [[ -z "$token" ]]; then log "ERROR" "No delete token exists for this file. It cannot be deleted."; return 1; fi
+    if (( config[TSH_CONFIRM_DELETE] )); then
+        read -rp "$(printf "%b" "${COLOR_YELLOW}Are you sure you want to permanently delete file '$id'? [y/N]: ${COLOR_RESET}")" confirm
+        [[ ! "$confirm" =~ ^[yY](es)?$ ]] && log "INFO" "Deletion cancelled." && return
+    fi
+    log "INFO" "Sending delete request for '$id'..."; response=$(curl -s -A "$USER_AGENT" -X DELETE "${url}/del/${token}")
+    if [[ "$response" =~ "deleted" ]]; then
+        local temp_db; temp_db=$(mktemp); grep -v "^$id|" "$DB_FILE" > "$temp_db"; mv "$temp_db" "$DB_FILE"
+        log "SUCCESS" "File '$id' has been deleted."; log_audit_event "DELETE" "SUCCESS" "$id"
+    else
+        log "ERROR" "Failed to delete file. Response: $response"; log_audit_event "DELETE" "FAIL" "$id|$response"
+    fi
+}
+scan_file() {
+    [ $# -eq 0 ] && { log "ERROR" "You must provide a file ID. Usage: tsh scan <ID>"; return 1; }
+    local id="$1"; validate_id "$id" || return 1
+    # shellcheck disable=SC2162
+    IFS='|' read -r id _ _ _ download_url _ _ _ _ _ < <(grep "^$id|" "$DB_FILE")
+    local scan_url="$download_url/virustotal"; log "INFO" "Submitting to VirusTotal..."
+    response=$(curl -s -I -A "$USER_AGENT" "$scan_url")
+    local report_url; report_url=$(echo "$response" | grep -i 'x-report-url' | awk '{print $2}' | tr -d '\r')
+    if [ -n "$report_url" ]; then log "SUCCESS" "Scan submitted: $report_url"; log_audit_event "VIRUSTOTAL" "SUCCESS" "$id|$report_url"; else log "ERROR" "Failed to submit for scanning."; log_audit_event "VIRUSTOTAL" "FAIL" "$id"; fi
+}
+config_cmd() {
+    case "${1:-view}" in
+        view) log "INFO" "Current configuration from $ENV_FILE:"; for key in "${!config[@]}"; do printf "  %b = %s\n" "${COLOR_BOLD}${key}${COLOR_RESET}" "${config[$key]}"; done;;
+        set) [ $# -ne 3 ] && { log "ERROR" "Usage: tsh config set <KEY> <VALUE>"; return 1; }; local key="$2" value="$3"; if ! grep -q "^$key=" "$ENV_FILE"; then echo "$key=\"$value\"" >> "$ENV_FILE"; else sed -i "s|^$key=.*|$key=\"$value\"|" "$ENV_FILE"; fi; log "SUCCESS" "Set '$key' to '$value'.";;
+        *) log "ERROR" "Unknown config command: '$1'. Use 'view' or 'set'." && return 1;;
+    esac
+}
+view_logs() {
+    local lines="${1:-15}"; if [ ! -s "$LOG_FILE" ]; then log "INFO" "Audit log is empty."; return; fi
+    log "INFO" "Showing last ${lines} lines of audit log:"; tail -n "${lines}" "$LOG_FILE"
+}
+purge_logs() {
+    local max_age_days="${config[TSH_MAX_LOG_AGE]}"; log "INFO" "Purging log entries older than $max_age_days days..."
+    local cutoff_date; cutoff_date=$(date -d "$max_age_days days ago" --iso-8601=seconds)
+    local temp_log; temp_log=$(mktemp); awk -F'|' -v cutoff="$cutoff_date" '$1 > cutoff' "$LOG_FILE" > "$temp_log"
+    local original_lines; original_lines=$(wc -l < "$LOG_FILE"); local new_lines; new_lines=$(wc -l < "$temp_log")
+    mv "$temp_log" "$LOG_FILE"; log "SUCCESS" "Purged $((original_lines - new_lines)) old log entries."
+}
+reset_system() {
+    log "WARN" "${COLOR_RED}${COLOR_BOLD}This will delete your local database and logs. Your configuration will be kept.${COLOR_RESET}"
+    read -rp "$(printf "%b" "${COLOR_YELLOW}Are you sure? [y/N]: ${COLOR_RESET}")" confirm
+    if [[ "$confirm" =~ ^[yY](es)?$ ]]; then
+        log "INFO" "Deleting database and log files..."; rm -f "$DB_FILE" "$LOG_FILE"
+        log "SUCCESS" "tsh database and logs have been reset."
+    else
+        log "INFO" "Reset cancelled."
+    fi
+}
+health_check() {
+    log "INFO" "Checking server health at ${config[TSH_SERVER]}...";
+    local http_code; http_code=$(curl -L -s -o /dev/null -w "%{http_code}" --connect-timeout 5 -A "$USER_AGENT" "${config[TSH_SERVER]}")
+    if [[ "$http_code" == "200" ]]; then
+        log "SUCCESS" "Server is online and responding."
+    else
+        log "ERROR" "Server may be unreachable (HTTP code: $http_code)."
+    fi
+}
+
+
+##################################################
+# HELP & USAGE
+##################################################
+show_help() {
+    printf "%b\n" "${COLOR_BOLD}${COLOR_CYAN}tsh - Transfer.sh Enterprise CLI Manager v$VERSION${COLOR_RESET}"
+    printf "%b\n" "${COLOR_YELLOW}A secure and robust CLI for enterprise file transfers.${COLOR_RESET}"
+    printf "\n%b\n" "${COLOR_ORANGE}${COLOR_BOLD}LIFECYCLE MANAGEMENT${COLOR_RESET}"
+    printf "  tsh is a system-wide command. If you are running this script directly,\n"
+    printf "  you should first install it to make it available everywhere.\n"
+    printf "  ${COLOR_GREEN}%-22s${COLOR_RESET} %s\n" "./tsh-manager install" "Install tsh to ${INSTALL_PATH}."
+    printf "  ${COLOR_RED}%-22s${COLOR_RESET} %s\n" "tsh uninstall" "Completely remove tsh and all user data."
+    printf "\n%b\n" "${COLOR_BOLD}USAGE${COLOR_RESET}"
+    printf "  tsh <command> [options] [arguments]\n"
+    printf "\n%b\n" "${COLOR_BOLD}CORE COMMANDS${COLOR_RESET}"
+    printf "  ${COLOR_GREEN}%-22s${COLOR_RESET} %s\n" "upload <file>" "Upload a file."
+    printf "  ${COLOR_GREEN}%-22s${COLOR_RESET} %s\n" "download <id> [out]" "Download a file by its ID."
+    printf "  ${COLOR_GREEN}%-22s${COLOR_RESET} %s\n" "list" "List all tracked file uploads."
+    printf "  ${COLOR_GREEN}%-22s${COLOR_RESET} %s\n" "info <id>" "Show detailed information for a file."
+    printf "  ${COLOR_GREEN}%-22s${COLOR_RESET} %s\n" "delete <id>" "Delete a file from the server and database."
+    printf "  ${COLOR_GREEN}%-22s${COLOR_RESET} %s\n" "scan <id>" "Submit a file for a VirusTotal scan."
+    printf "\n%b\n" "${COLOR_BOLD}CONFIGURATION & MANAGEMENT${COLOR_RESET}"
+    printf "  ${COLOR_BLUE}%-22s${COLOR_RESET} %s\n" "config view" "View current configuration."
+    printf "  ${COLOR_BLUE}%-22s${COLOR_RESET} %s\n" "config set <K> <V>" "Set a configuration value."
+    printf "  ${COLOR_BLUE}%-22s${COLOR_RESET} %s\n" "logs [-n lines]" "View the last N lines of the audit log."
+    printf "  ${COLOR_BLUE}%-22s${COLOR_RESET} %s\n" "purge-logs" "Clean up old log entries based on MAX_LOG_AGE."
+    printf "  ${COLOR_BLUE}%-22s${COLOR_RESET} %s\n" "health" "Check the status of the transfer.sh server."
+    printf "  ${COLOR_BLUE}%-22s${COLOR_RESET} %b\n" "reset" "${COLOR_RED}DANGER:${COLOR_RESET} Delete local DB and logs (keeps config)."
+    printf "\n%b\n" "${COLOR_BOLD}UPLOAD OPTIONS${COLOR_RESET}"
+    printf "  %-22s %s\n" "-n, --name <name>" "Set a custom filename for the upload."
+    printf "  %-22s %s\n" "-d, --desc <desc>" "Add a description to the file."
+    printf "  %-22s %s\n" "-e, --encrypt" "Encrypt the file with GPG before uploading."
+    printf "  %-22s %s\n" "--days <num>" "Set the upload to expire after <num> days."
+    printf "  %-22s %s\n" "--downloads <num>" "Set the upload to expire after <num> downloads."
+    printf "  %-22s %s\n" "-q, --quiet" "Enable quiet mode (outputs only the URL)."
+    printf "\n%b\n" "${COLOR_BOLD}GENERAL OPTIONS${COLOR_RESET}"
+    printf "  %-22s %s\n" "-h, --help" "Show this comprehensive help message."
+    printf "  %-22s %s\n" "-v, --version" "Show the version of tsh."
+    printf "  %-22s %s\n" "--debug" "Enable debug mode for diagnostics."
+    printf "\n%b\n" "${COLOR_YELLOW}EXAMPLES${COLOR_RESET}"
+    printf "  ${COLOR_CYAN}# Encrypt and upload a report, expiring in 7 days:${COLOR_RESET}\n"
+    printf "  tsh upload -e --days 7 -d \"Weekly Report\" report.docx\n\n"
+    printf "  ${COLOR_CYAN}# Pipe a directory archive for instant upload:${COLOR_RESET}\n"
+    printf "  tar -czf - ./my-project/ | tsh upload -n my-project.tar.gz\n\n"
+    printf "  ${COLOR_CYAN}# Use in a script to get the URL silently:${COLOR_RESET}\n"
+    printf "  URL=\$(tsh upload -q important_data.zip); echo \"Backup at: \$URL\"\n"
+}
+
+##################################################
+# MAIN EXECUTION & COMMAND ROUTER
+##################################################
+load_user_config() {
+    if [ ! -f "$ENV_FILE" ]; then return; fi
+    while IFS='=' read -r key value; do
+        [[ "$key" =~ ^# || -z "$key" ]] && continue
+        value="${value%\"}"; value="${value#\"}"
+        config["$key"]="$value"
+    done < "$ENV_FILE"
+}
+
+main() {
+    trap 'cleanup' EXIT INT TERM
+    case "${1-}" in
+        install|uninstall) "$1_tsh" "$@"; exit 0;;
+        --first-run) first_run_setup; exit 0;;
+        --post-uninstall-cleanup) post_uninstall_cleanup; exit 0;;
+        *) if [[ "$0" != "$INSTALL_PATH" ]] && [ "$#" -gt 0 ]; then
+               if [[ "$1" != "--debug" ]]; then show_help; exit 1; fi
+           fi;;
+    esac
+    init_security; load_user_config;
+    if [[ "$0" == "$INSTALL_PATH" && "$#" -eq 0 ]]; then show_help; exit 0; fi
+    init_db
+    local custom_name="" description="" encrypt=0 max_days="" max_downloads=""
+    local args=(); while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -n|--name) custom_name="$2"; shift 2 ;; -d|--desc) description="$2"; shift 2 ;;
+            -e|--encrypt) encrypt=1; shift ;; --days) max_days="$2"; shift 2 ;;
+            --downloads) max_downloads="$2"; shift 2 ;; -q|--quiet) config[TSH_QUIET]=1; shift ;;
+            --debug) DEBUG_MODE=1; shift ;;
+            *) args+=("$1"); shift ;;
+        esac
+    done; set -- "${args[@]}"
+    local cmd="${1:-help}"; if [[ $# -gt 0 ]]; then shift; fi
+    
+    case "$cmd" in
+        upload|u) [ $# -eq 0 ] && { log "ERROR" "No file specified."; show_help; exit 1; }; upload "$1" "$custom_name" "$description" "$encrypt" "$max_days" "$max_downloads";;
+        list|ls|l) list_files;; info|i) info "$@";; delete|rm|d) delete_file "$@";;
+        reset) reset_system;; health) health_check;; config) config_cmd "$@";;
+        logs) view_logs "$@";; purge-logs) purge_logs;; scan) scan_file "$@";;
+        download|dl) download "$@";; version|-v|--version) printf "tsh version %s\n" "$VERSION";;
+        help|-h|--help) show_help;; *) log "ERROR" "Unknown command: '$cmd'"; show_help; exit 1;;
+    esac
+}
+
+main "$@"

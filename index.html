@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TRAP.LOL | Share</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+/* Global Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+:root {
+    --black: #121212;
+    --dark-purple: #1a0a2e;
+    --purple: #5e35b1;
+    --light-purple: #7e57c2;
+    --neon: #b388ff;
+    --white: #f5f5f5;
+    --border: rgba(126, 87, 194, 0.3);
+    --card-bg: rgba(94, 53, 177, 0.15);
+    --card-hover-bg: rgba(126, 87, 194, 0.25);
+    --error-red: #ff6b6b;
+    --image-color: #8e44ad;
+    --text-color: #27ae60;
+    --pdf-color: #e74c3c;
+    --archive-color: #f39c12;
+}
+
+body {
+    background: linear-gradient(135deg, var(--black), var(--dark-purple));
+    color: var(--white);
+    min-height: 100vh;
+    overflow: auto;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.container {
+    width: 100%;
+    max-width: 800px;
+    margin: 20px auto;
+    background: rgba(26, 10, 46, 0.7);
+    border-radius: 20px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(126, 87, 194, 0.2);
+    backdrop-filter: blur(10px);
+    transition: all 0.5s ease;
+}
+
+.header {
+    padding: 25px;
+    text-align: center;
+    background: rgba(30, 12, 54, 0.6);
+    position: relative;
+    border-bottom: 1px solid var(--purple);
+}
+
+.logo {
+    font-size: 2.2rem;
+    font-weight: 800;
+    margin-bottom: 5px;
+    background: linear-gradient(45deg, var(--neon), var(--light-purple));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.tagline {
+    color: var(--light-purple);
+    font-size: 1.1rem;
+    letter-spacing: 1px;
+    margin-top: 5px;
+}
+
+.back-btn {
+    position: absolute;
+    left: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--neon);
+    font-size: 1.5rem;
+    cursor: pointer;
+    z-index: 10;
+}
+
+.main-content {
+    padding: 25px;
+}
+
+/* Particles background */
+#particles-js {
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    top: 0;
+    left: 0;
+}
+
+.footer {
+    padding: 20px;
+    text-align: center;
+    color: #7e57c2;
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+    border-top: 1px solid rgba(94, 53, 177, 0.2);
+    margin-top: 20px;
+}
+
+/* --- PORTAL PAGE STYLES --- */
+.portal-page .description {
+    text-align: center;
+    margin-bottom: 25px;
+    line-height: 1.6;
+    color: #d1c4e9;
+    max-width: 600px;
+    margin: 0 auto 25px;
+}
+
+.portal-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 15px;
+    width: 100%;
+    max-width: 600px;
+    margin: 25px auto 0;
+}
+
+.portal-item {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 12px;
+    text-align: center;
+    transition: all 0.3s ease;
+    cursor: crosshair;
+    opacity: 0;
+    transform: translateY(20px);
+}
+
+.portal-item.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.portal-item:hover {
+    transform: translateY(-5px);
+    background: var(--card-hover-bg);
+    box-shadow: 0 10px 25px rgba(179, 136, 255, 0.2);
+    border-color: var(--neon);
+}
+
+.portal-icon { font-size: 1.8rem; margin-bottom: 12px; color: var(--neon); }
+.portal-title { font-size: 0.85rem; font-weight: 600; margin-bottom: 5px; letter-spacing: 0.5px; text-transform: uppercase; }
+.portal-desc { font-size: 0.75rem; color: #b39ddb; }
+
+.action-btn {
+    background: linear-gradient(45deg, var(--purple), var(--light-purple));
+    color: white; border: none; padding: 14px 35px; font-size: 1rem;
+    font-weight: 600; border-radius: 50px; margin: 25px auto 0;
+    cursor: pointer; transition: all 0.3s ease; letter-spacing: 1px;
+    box-shadow: 0 5px 15px rgba(126, 87, 194, 0.4); display: block;
+}
+
+.action-btn:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(179, 136, 255, 0.6);
+    background: linear-gradient(45deg, var(--light-purple), var(--purple));
+}
+
+/* --- LINKS & DOWNLOAD PAGE SHARED STYLES --- */
+.links-page, .download-page, .error-page { display: none; }
+.page-title { text-align: center; margin-bottom: 25px; color: var(--neon); font-size: 1.7rem; }
+
+.links-container { display: flex; flex-direction: column; gap: 12px; }
+.link-item {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+    transition: all 0.3s ease;
+    opacity: 0;
+    transform: translateY(10px);
+    cursor: pointer;
+}
+
+.link-item.visible { opacity: 1; transform: translateY(0); }
+.link-item:hover { background: var(--card-hover-bg); border-color: var(--neon); transform: translateX(5px); }
+
+.link-title { font-size: 1.1rem; font-weight: 600; color: var(--neon); margin-bottom: 5px; display: flex; align-items: center; }
+.link-title i { margin-right: 10px; }
+.link-desc { color: #d1c4e9; margin-bottom: 10px; font-size: 0.9rem; }
+.link-meta { display: flex; justify-content: space-between; color: #b39ddb; font-size: 0.8rem; }
+.link-url { color: var(--light-purple); word-break: break-all; }
+.links-info { text-align: center; margin: 18px 0; color: #b39ddb; font-size: 0.85rem; }
+
+/* --- DOWNLOAD PAGE SPECIFIC STYLES --- */
+.download-page .content-grid {
+    display: flex;
+    gap: 1.8rem;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.download-page .info-card, .download-page .preview-card {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 1.8rem;
+    flex: 1;
+    min-width: 280px;
+    max-width: 450px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+}
+
+.download-page .preview-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.download-page h2 {
+    font-size: 1.5rem;
+    color: var(--white);
+    border-bottom: 2px solid var(--purple);
+    padding-bottom: 0.5rem;
+    display: inline-block;
+    margin-bottom: 1rem;
+    word-break: break-all;
+    max-width: 100%;
+    text-align: center;
+}
+
+.download-page .file-meta p { margin: 0.5rem 0; font-size: 1.05rem; text-align: center; }
+
+.download-page .download-btn {
+    display: inline-block;
+    background: var(--purple);
+    color: white;
+    padding: 14px 30px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: bold;
+    font-size: 1.05rem;
+    transition: all 0.3s ease;
+    text-align: center;
+    width: 100%;
+    margin: 1rem 0;
+}
+
+.download-page .download-btn:hover { background: var(--light-purple); transform: translateY(-3px); box-shadow: 0 6px 12px rgba(138, 43, 226, 0.3); }
+
+/* View in Browser button */
+.download-page .view-btn {
+    display: inline-block;
+    background: transparent;
+    color: var(--neon);
+    border: 1px solid var(--neon);
+    padding: 14px 30px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: bold;
+    font-size: 1.05rem;
+    transition: all 0.3s ease;
+    text-align: center;
+    width: 100%;
+    margin: 0.5rem 0 1rem;
+    cursor: pointer;
+}
+
+.download-page .view-btn:hover {
+    background: rgba(179, 136, 255, 0.1);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(179, 136, 255, 0.2);
+}
+
+.download-page .qr-container {
+    text-align: center;
+    margin: 1.8rem 0;
+    padding: 1.4rem;
+    background: rgba(0,0,0,0.2);
+    border-radius: 10px;
+}
+
+.download-page .qr-title { font-weight: bold; margin-bottom: 1rem; color: var(--white); font-size: 1.05rem; }
+.download-page #qrCode {
+    display: flex;
+    justify-content: center;
+    padding: 10px;
+    background: white;
+    border-radius: 8px;
+    max-width: 200px;
+    margin: 0 auto;
+}
+
+.download-page .direct-link-container { margin: 1.4rem 0; text-align: center; }
+.download-page .direct-link-input {
+    width: 100%;
+    padding: 12px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: white;
+    font-family: monospace;
+    font-size: 0.9rem;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+.download-page .copy-btn {
+    background: #333;
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s;
+    width: 100%;
+    font-weight: bold;
+}
+
+.download-page .copy-btn:hover { background: #555; }
+
+.download-page .img-preview {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    cursor: pointer;
+    transition: transform 0.3s;
+}
+
+.download-page .img-preview:hover {
+    transform: scale(1.02);
+}
+
+.download-page .pdf-preview {
+    width: 100%;
+    height: 500px;
+    border: none;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+
+.download-page .preview-btn {
+    background: var(--purple);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 1rem;
+    transition: background 0.3s;
+    margin-bottom: 1.5rem;
+}
+
+.download-page .preview-btn:hover { background: var(--light-purple); }
+
+.download-page .text-preview {
+    text-align: left;
+    background: rgba(0,0,0,0.2);
+    padding: 1.4rem;
+    border-radius: 8px;
+    max-height: 350px;
+    overflow: auto;
+    white-space: pre-wrap;
+    font-family: monospace;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    width: 100%;
+}
+
+.download-page .file-icon {
+    font-size: 3.5rem;
+    margin: 1.2rem 0;
+    color: var(--purple);
+}
+
+.file-preview-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    text-align: center;
+}
+
+/* Portal Colors */
+.portal-image { color: var(--image-color); border-color: var(--image-color); }
+.portal-text { color: var(--text-color); border-color: var(--text-color); }
+.portal-pdf { color: var(--pdf-color); border-color: var(--pdf-color); }
+.portal-zip { color: var(--archive-color); border-color: var(--archive-color); }
+
+.portal-image .tagline,
+.portal-image .header { border-color: var(--image-color); }
+
+.portal-text .tagline,
+.portal-text .header { border-color: var(--text-color); }
+
+.portal-pdf .tagline,
+.portal-pdf .header { border-color: var(--pdf-color); }
+
+.portal-zip .tagline,
+.portal-zip .header { border-color: var(--archive-color); }
+
+/* Error Page Styles */
+.error-page .error-content {
+    text-align: center;
+    padding: 50px 20px;
+}
+
+.error-page .error-icon {
+    font-size: 5rem;
+    color: var(--error-red);
+    margin-bottom: 25px;
+}
+
+.error-page .error-title {
+    font-size: 2.5rem;
+    color: var(--neon);
+    margin-bottom: 20px;
+}
+
+.error-page .error-message {
+    font-size: 1.2rem;
+    color: #d1c4e9;
+    margin-bottom: 30px;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+    line-height: 1.6;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .download-page .content-grid { flex-direction: column; }
+    .container { margin: 15px auto; }
+    .download-page .pdf-preview {
+        height: 300px;
+    }
+}
+
+@media (max-width: 600px) {
+    .container { border-radius: 15px; }
+    .header { padding: 20px; }
+    .logo { font-size: 1.8rem; }
+    .main-content { padding: 18px; }
+    .back-btn { top: 22px; font-size: 1.2rem; }
+    .link-meta { flex-direction: column; gap: 5px; }
+    .portal-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+    .action-btn { padding: 12px 30px; font-size: 0.95rem; }
+    .download-page .info-card, .download-page .preview-card {
+        padding: 1.2rem;
+    }
+    .error-page .error-icon { font-size: 4rem; }
+    .error-page .error-title { font-size: 2rem; }
+    .error-page .error-message { font-size: 1rem; }
+}
+</style>
+</head>
+<body>
+<div id="particles-js"></div>
+
+<div class="container portal-page" id="portalPage">
+    <div class="header">
+        <div class="logo">TRAP.LOL</div>
+        <div class="tagline">Whispers</div>
+    </div>
+    <div class="main-content">
+        <p class="description">Access point<br>Consider this your gateway</p>
+        <div class="portal-grid">
+            <div class="portal-item"><div class="portal-icon"><i class="fas fa-music"></i></div><div class="portal-title">Sonance</div><div class="portal-desc">Themes & concepts</div></div>
+            <div class="portal-item"><div class="portal-icon"><i class="fas fa-heart"></i></div><div class="portal-title">Timbre</div><div class="portal-desc">Emotion core</div></div>
+            <div class="portal-item"><div class="portal-icon"><i class="fas fa-image"></i></div><div class="portal-title">Resonance</div><div class="portal-desc">Source image</div></div>
+            <div class="portal-item"><div class="portal-icon"><i class="fas fa-paint-brush"></i></div><div class="portal-title">Waveform</div><div class="portal-desc">Raw sketches</div></div>
+            <div class="portal-item"><div class="portal-icon"><i class="fas fa-sliders-h"></i></div><div class="portal-title">Syncopate</div><div class="portal-desc">Visual rhythm</div></div>
+            <div class="portal-item"><div class="portal-icon"><i class="fas fa-wave-square"></i></div><div class="portal-title">Noise</div><div class="portal-desc">Final artifact</div></div>
+            <div class="portal-item"><div class="portal-icon"><i class="fas fa-font"></i></div><div class="portal-title">Lyric</div><div class="portal-desc">Verbal vibration</div></div>
+            <div class="portal-item"><div class="portal-icon"><i class="fas fa-certificate"></i></div><div class="portal-title">Frequency</div><div class="portal-desc">Verification</div></div>
+            <div class="portal-item"><div class="portal-icon"><i class="fas fa-copy"></i></div><div class="portal-title">Octave</div><div class="portal-desc">Reproductions</div></div>
+            <div class="portal-item"><div class="portal-icon"><i class="fas fa-layer-group"></i></div><div class="portal-title">Canticle</div><div class="portal-desc">Collections</div></div>
+            <div class="portal-item"><div class="portal-icon"><i class="fas fa-rainbow"></i></div><div class="portal-title">Echo</div><div class="portal-desc">Raw ideas</div></div>
+        </div>
+        <button class="action-btn" id="showSharedLinks">Force Open</button>
+    </div>
+    <div class="footer">How loud must you yell to be heard</div>
+</div>
+
+<div class="container links-page" id="linksPage">
+    <div class="header">
+        <div class="back-btn" id="backToPortal"><i class="fas fa-arrow-left"></i></div>
+        <div class="logo">TRAP.LOL</div>
+        <div class="tagline">Whispers</div>
+    </div>
+    <div class="main-content">
+        <h1 class="page-title">Artifacts</h1>
+        <div class="links-container" id="linksContainer">
+            <div class="link-item"><div class="link-title"><i class="fas fa-spinner fa-spin"></i> Loading artifacts...</div></div>
+        </div>
+        <div class="links-info">
+            <i class="fas fa-info-circle"></i> New artifacts are added manually to the system
+        </div>
+    </div>
+    <div class="footer">If no one would hear you, why did you scream</div>
+</div>
+
+<div class="container download-page" id="downloadPage">
+    <div class="header">
+        <div class="back-btn" id="backToLinks"><i class="fas fa-arrow-left"></i></div>
+        <div class="logo">TRAP.LOL</div>
+        <div class="tagline">Artifact Details</div>
+    </div>
+    <div class="main-content">
+        <div class="content-grid">
+            <div class="info-card">
+                <h2 id="downloadFilename"></h2>
+                <div class="file-meta">
+                    <p><strong>Date:</strong> <span id="downloadDate"></span></p>
+                </div>
+                <a href="#" id="downloadBtn" class="download-btn" download>Download File</a>
+                <div class="direct-link-container">
+                    <h3>Direct Link:</h3>
+                    <input type="text" id="directLink" value="" readonly class="direct-link-input">
+                    <button id="copyLinkBtn" class="copy-btn">Copy Link to Clipboard</button>
+                </div>
+                <div class="qr-container">
+                    <div class="qr-title">Scan to Download</div>
+                    <div id="qrCode"></div>
+                </div>
+            </div>
+            <div class="preview-card">
+                <h3 class="page-title">File Preview</h3>
+                <div class="file-preview-container" id="filePreview">
+                    <i class="fas fa-file file-icon"></i>
+                    <p>Preview will appear here</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="footer">Shared via TRAP.LOL</div>
+</div>
+
+<div class="container error-page" id="errorPage">
+    <div class="header">
+        <div class="back-btn" id="backFromError"><i class="fas fa-arrow-left"></i></div>
+        <div class="logo">TRAP.LOL</div>
+        <div class="tagline">Error</div>
+    </div>
+    <div class="main-content">
+        <div class="error-content">
+            <div class="error-icon"><i class="fas fa-exclamation-triangle"></i></div>
+            <h1 class="error-title" id="errorTitle">404 Not Found</h1>
+            <p class="error-message" id="errorMessage">The artifact you requested doesn't exist</p>
+            <button class="action-btn" id="homeBtn">Return to Portal</button>
+        </div>
+    </div>
+    <div class="footer">The path you walked has been erased</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+<script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // File type mapping
+    const fileTypeIcons = {
+        'image': 'file-image portal-image',
+        'pdf': 'file-pdf portal-pdf',
+        'archive': 'file-archive portal-zip',
+        'text': 'file-alt portal-text',
+        'default': 'file'
+    };
+
+    const fileTypeThemes = {
+        'image': { 
+            name: 'image',
+            icon: 'image', 
+            color: 'var(--image-color)',
+            title: 'Source image'
+        },
+        'pdf': { 
+            name: 'pdf',
+            icon: 'file-pdf', 
+            color: 'var(--pdf-color)',
+            title: 'Verbal vibration'
+        },
+        'text': { 
+            name: 'text',
+            icon: 'file-alt', 
+            color: 'var(--text-color)',
+            title: 'Verification'
+        },
+        'archive': { 
+            name: 'zip',
+            icon: 'file-archive', 
+            color: 'var(--archive-color)',
+            title: 'Reproductions'
+        },
+        'default': { 
+            name: 'NOID',
+            icon: 'file', 
+            color: 'var(--neon)',
+            title: 'Final artifact'
+        }
+    };
+
+    // --- EMBEDDED JSON DATA ---
+    const artifactsData = [
+        {
+            "title": "Test File",
+            "url": "https://share.trap.lol/get/VOojn7J8XQ3n/test.txt",
+            "directLink": "#VOojn7J8XQ3n/test.txt",
+            "description": "Text file test",
+            "date": "2025-07-17",
+            "portal": "Resonance"
+        },
+        {
+            "title": "Test Img",
+            "url": "https://share.trap.lol/get/OLXpib3VQgEs/wallhaven-zm5vgy.jpg",
+            "directLink": "#OLXpib3VQgEs/wallhaven-zm5vgy.jpg",
+            "description": "Image file test",
+            "date": "2025-07-17",
+            "portal": "Timbre"
+        }
+    ];
+
+    // --- PARTICLE FX ---
+    particlesJS('particles-js', {
+        particles: {
+            number: { value: 60, density: { enable: true, value_area: 800 } },
+            color: { value: "#7e57c2" }, shape: { type: "circle" },
+            opacity: { value: 0.3, random: true }, size: { value: 3, random: true },
+            line_linked: { enable: true, distance: 150, color: "#5e35b1", opacity: 0.2, width: 1 },
+            move: { enable: true, speed: 2, direction: "none", random: true, straight: false, out_mode: "out" }
+        },
+        interactivity: {
+            detect_on: "canvas",
+            events: { onhover: { enable: true, mode: "grab" }, onclick: { enable: true, mode: "push" } }
+        },
+        retina_detect: true
+    });
+
+    // Animate portal items
+    const portalItems = document.querySelectorAll('.portal-item');
+    portalItems.forEach((item, index) => {
+        setTimeout(() => item.classList.add('visible'), index * 150 + 300);
+    });
+
+    // --- PAGE ELEMENTS ---
+    const portalPage = document.getElementById('portalPage');
+    const linksPage = document.getElementById('linksPage');
+    const downloadPage = document.getElementById('downloadPage');
+    const errorPage = document.getElementById('errorPage');
+    const showSharedLinksBtn = document.getElementById('showSharedLinks');
+    const backToPortalBtn = document.getElementById('backToPortal');
+    const backToLinksBtn = document.getElementById('backToLinks');
+    const backFromErrorBtn = document.getElementById('backFromError');
+    const homeBtn = document.getElementById('homeBtn');
+
+    // --- HELPER FUNCTIONS ---
+    function getFileType(url) {
+        const ext = url.split('.').pop().toLowerCase();
+        if (['jpg', 'jpeg', 'png', 'webp'].includes(ext)) return 'image';
+        if (ext === 'pdf') return 'pdf';
+        if (ext === 'zip') return 'archive';
+        if (['txt', 'md'].includes(ext)) return 'text';
+        return 'default';
+    }
+
+    function validateFileType(fileUrl) {
+        const fileType = getFileType(fileUrl);
+        return fileType !== 'default'; // Only allow valid types
+    }
+
+    function showErrorPage(title, message) {
+        errorPage.style.display = 'block';
+        downloadPage.style.display = 'none';
+        linksPage.style.display = 'none';
+        portalPage.style.display = 'none';
+
+        document.getElementById('errorTitle').textContent = title;
+        document.getElementById('errorMessage').textContent = message;
+    }
+
+    // --- HASH-BASED ROUTING HANDLER ---
+    function handleRouting() {
+        // Get hash without the # symbol
+        const hash = window.location.hash.substring(1);
+
+        if (!hash || hash === 'portal') {
+            // Default portal page
+            portalPage.style.display = 'block';
+            linksPage.style.display = 'none';
+            downloadPage.style.display = 'none';
+            errorPage.style.display = 'none';
+            return;
+        }
+
+        if (hash === 'links') {
+            // Links page
+            portalPage.style.display = 'none';
+            linksPage.style.display = 'block';
+            downloadPage.style.display = 'none';
+            errorPage.style.display = 'none';
+            loadSharedLinks();
+            return;
+        }
+
+        // File access: #VOojn7J8XQ3n/test.txt
+        const parts = hash.split('/');
+        if (parts.length >= 2) {
+            const fileId = parts[0];
+            const filename = parts.slice(1).join('/');
+            const fileUrl = `https://share.trap.lol/get/${fileId}/${filename}`;
+
+            // Validate file type
+            if (!validateFileType(fileUrl)) {
+                showErrorPage('Unsupported File', 'Only JPG, PNG, WEBP, PDF, ZIP, TXT and MD files are supported');
+                return;
+            }
+
+            // Check if exists in artifactsData
+            const artifact = artifactsData.find(a => a.url.includes(fileId));
+
+            if (!artifact) {
+                showErrorPage('404 Not Found', 'The artifact you requested doesn\'t exist');
+                return;
+            }
+
+            // Show the download page
+            showDownloadPage(artifact);
+        } 
+        // Handle unknown hash routes
+        else {
+            showErrorPage('Unknown Path', 'The portal path you requested is unrecognized');
+        }
+    }
+
+    // --- NAVIGATION LOGIC - UPDATED FOR HASH ROUTING ---
+    showSharedLinksBtn.addEventListener('click', function() {
+        // Set hash to navigate to links page
+        window.location.hash = '#links';
+    });
+
+    backToPortalBtn.addEventListener('click', () => {
+        // Set hash to navigate to portal
+        window.location.hash = '#portal';
+    });
+
+    backToLinksBtn.addEventListener('click', () => {
+        // Set hash to navigate back to links page
+        window.location.hash = '#links';
+    });
+
+    backFromErrorBtn.addEventListener('click', () => {
+        // Set hash to navigate back to links page
+        window.location.hash = '#links';
+    });
+
+    homeBtn.addEventListener('click', () => {
+        // Set hash to navigate to portal
+        window.location.hash = '#portal';
+    });
+
+    // --- LOAD ARTIFACTS INTO LINKS PAGE - UPDATED FOR HASH ROUTING ---
+    function loadSharedLinks() {
+        const container = document.getElementById('linksContainer');
+        container.innerHTML = '<div class="link-item"><div class="link-title"><i class="fas fa-spinner fa-spin"></i> Loading artifacts...</div></div>';
+
+        try {
+            const links = artifactsData;
+            if (!links || links.length === 0) {
+                container.innerHTML = '<div class="link-item visible"><div class="link-title"><i class="fas fa-exclamation-circle"></i> No artifacts found</div></div>';
+                return;
+            }
+
+            container.innerHTML = '';
+            links.forEach((link, index) => {
+                const fileType = getFileType(link.url);
+                const fileTypeTheme = fileTypeThemes[fileType] || fileTypeThemes.default;
+                const portalName = link.portal || 'NoID';
+
+                const linkElement = document.createElement('div');
+                linkElement.className = 'link-item';
+                linkElement.innerHTML = `
+                    <div class="link-title" style="color: ${fileTypeTheme.color}">
+                        <i class="fas fa-${fileTypeTheme.icon}"></i> 
+                        ${link.title || 'Artifact'} 
+                        <span style="font-size: 0.8rem; background: ${fileTypeTheme.color}20; padding: 2px 8px; border-radius: 10px; margin-left: 8px;">
+                            ${portalName}
+                        </span>
+                    </div>
+                    <div class="link-desc">${link.description || 'No description available'}</div>
+                    <div class="link-meta">
+                        <span>${link.date || ''}</span>
+                        <span class="link-url">${link.url.split('/').pop()}</span>
+                    </div>
+                `;
+
+                linkElement.addEventListener('click', () => {
+                    if (!validateFileType(link.url)) {
+                        showErrorPage('Unsupported File', 'Only JPG, PNG, WEBP, PDF, ZIP, TXT and MD files are supported');
+                        return;
+                    }
+
+                    // Set hash to navigate to download page
+                    window.location.hash = link.directLink;
+                });
+
+                container.appendChild(linkElement);
+                setTimeout(() => linkElement.classList.add('visible'), index * 100 + 100);
+            });
+        } catch (e) {
+            console.error('Error loading artifacts:', e);
+            container.innerHTML = '<div class="link-item visible"><div class="link-title"><i class="fas fa-exclamation-triangle"></i> Error loading artifacts</div><div class="link-desc">Could not process local artifact data.</div></div>';
+        }
+    }
+
+    // --- DOWNLOAD PAGE LOGIC - UPDATED FOR HASH ROUTING ---
+    let qrCodeInstance = null;
+
+    function applyFileTypeStyles(fileType) {
+        const theme = fileTypeThemes[fileType] || fileTypeThemes.default;
+        const downloadPage = document.getElementById('downloadPage');
+
+        // Reset all classes
+        downloadPage.classList.remove('portal-image', 'portal-text', 'portal-pdf', 'portal-zip');
+
+        // Apply specific theme
+        if (fileType === 'image') downloadPage.classList.add('portal-image');
+        else if (fileType === 'text') downloadPage.classList.add('portal-text');
+        else if (fileType === 'pdf') downloadPage.classList.add('portal-pdf');
+        else if (fileType === 'archive') downloadPage.classList.add('portal-zip');
+
+        // Update tagline
+        const tagline = downloadPage.querySelector('.tagline');
+        tagline.textContent = theme.name;
+        tagline.style.color = theme.color;
+
+        // Update header border color
+        const header = downloadPage.querySelector('.header');
+        header.style.borderBottomColor = theme.color;
+    }
+
+    function showDownloadPage(artifact) {
+    portalPage.style.display = 'none';
+    linksPage.style.display = 'none';
+    downloadPage.style.display = 'block';
+    errorPage.style.display = 'none';  // Fixed variable name
+
+    // Apply file type specific styles
+    const fileType = getFileType(artifact.url);
+    applyFileTypeStyles(fileType);
+
+    // Populate data
+    document.getElementById('downloadFilename').textContent = artifact.title;
+    document.getElementById('downloadDate').textContent = artifact.date || 'N/A';
+
+    // Create clean URLs without /get/ path
+    const fileUrl = artifact.url;
+    const directLink = window.location.origin + window.location.pathname + artifact.directLink;
+
+    document.getElementById('downloadBtn').href = fileUrl;
+    document.getElementById('directLink').value = directLink;
+
+    // Generate QR Code
+    const qrContainer = document.getElementById('qrCode');
+    qrContainer.innerHTML = '';
+    if (qrCodeInstance) {
+        qrCodeInstance.clear();
+    }
+    qrCodeInstance = new QRCode(qrContainer, {
+        text: directLink,
+        width: 160,
+        height: 160,
+        colorDark: "#5e35b1",
+        colorLight: "transparent",
+        correctLevel: QRCode.CorrectLevel.H
+    });
+
+    // Setup file preview
+    setupFilePreview(fileUrl, fileType);
+}
+
+    // File preview handler with type-specific portals
+    function setupFilePreview(fileUrl, fileType) {
+        const previewContainer = document.getElementById('filePreview');
+        previewContainer.innerHTML = `
+            <i class="fas fa-spinner fa-spin" style="font-size: 2.5rem; margin-bottom: 1rem;"></i>
+            <p>Loading preview...</p>
+        `;
+
+        const filename = fileUrl.split('/').pop().toLowerCase();
+        const theme = fileTypeThemes[fileType] || fileTypeThemes.default;
+
+        setTimeout(() => {
+            if (fileType === 'image') {
+                previewContainer.innerHTML = `
+                    <div style="text-align: center;">
+                        <i class="fas fa-${theme.icon}" style="font-size: 3.5rem; color: ${theme.color}; margin: 1rem 0;"></i>
+                        <h3 style="color: ${theme.color}; margin-bottom: 1rem;">${theme.title}</h3>
+                        <img src="${fileUrl}" class="img-preview" alt="Image preview">
+                        <p style="margin-top: 1rem;">Click image to view in browser</p>
+                    </div>
+                `;
+
+                // Make image clickable to open in new tab
+                const img = previewContainer.querySelector('img');
+                img.addEventListener('click', () => {
+                    window.open(fileUrl, '_blank');
+                });
+            } 
+            else if (fileType === 'pdf') {
+                previewContainer.innerHTML = `
+                    <div style="text-align: center;">
+                        <i class="fas fa-${theme.icon}" style="font-size: 3.5rem; color: ${theme.color}; margin: 1rem 0;"></i>
+                        <h3 style="color: ${theme.color}; margin-bottom: 1rem;">${theme.title}</h3>
+                        <iframe src="${fileUrl}" class="pdf-preview"></iframe>
+                        <p style="margin-top: 1rem;">PDF Preview</p>
+                    </div>
+                `;
+            } 
+            else if (fileType === 'text') {
+                fetch(fileUrl)
+                    .then(response => response.text())
+                    .then(text => {
+                        previewContainer.innerHTML = `
+                            <div style="text-align: center; width: 100%;">
+                                <i class="fas fa-${theme.icon}" style="font-size: 3.5rem; color: ${theme.color}; margin: 1rem 0;"></i>
+                                <h3 style="color: ${theme.color}; margin-bottom: 1rem;">${theme.title}</h3>
+                                <pre class="text-preview">${text.substring(0, 5000)}</pre>
+                                <p style="margin-top: 1rem;">Text Preview</p>
+                            </div>
+                        `;
+                    })
+                    .catch(error => {
+                        previewContainer.innerHTML = `
+                            <div class="file-icon"><i class="fas fa-file-alt"></i></div>
+                            <p>Text preview unavailable</p>
+                            <p><small>${error.message}</small></p>
+                        `;
+                    });
+            }
+            else if (fileType === 'archive') {
+                previewContainer.innerHTML = `
+                    <div style="text-align: center;">
+                        <i class="fas fa-${theme.icon}" style="font-size: 3.5rem; color: ${theme.color}; margin: 1rem 0;"></i>
+                        <h3 style="color: ${theme.color}; margin-bottom: 1rem;">${theme.title}</h3>
+                        <p>No preview available for archive files</p>
+                    </div>
+                `;
+            }
+            else {
+                previewContainer.innerHTML = `
+                    <div style="text-align: center;">
+                        <i class="fas fa-file" style="font-size: 3.5rem; color: var(--neon); margin: 1rem 0;"></i>
+                        <h3 style="color: var(--neon); margin-bottom: 1rem;">No Preview</h3>
+                        <p>No preview available for this file type</p>
+                    </div>
+                `;
+            }
+        }, 800);
+    }
+
+    // Copy link button
+    document.getElementById('copyLinkBtn')?.addEventListener('click', function() {
+        const copyInput = document.getElementById("directLink");
+        copyInput.select();
+        copyInput.setSelectionRange(0, 99999);
+        navigator.clipboard.writeText(copyInput.value);
+
+        const originalText = this.textContent;
+        this.textContent = 'Copied!';
+        setTimeout(() => { this.textContent = originalText; }, 2000);
+    });
+
+    // Initial routing handling
+    handleRouting();
+
+    // Handle browser navigation (back/forward buttons)
+    window.addEventListener('hashchange', handleRouting);
+});
+</script>
+</body>
+</html>
